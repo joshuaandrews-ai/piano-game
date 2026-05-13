@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Math Piano</title>
+<style>
+    body {
+        margin: 0;
+        padding: 0;
+        background-color: #222;
+        color: white;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        overflow: hidden;
+    }
+    #game-container {
+        position: relative;
+        width: 400px;
+        height: 600px;
+        background-color: #333;
+        box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        border: 2px solid #555;
+    }
+    canvas {
+        display: block;
+    }
+    .overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.85);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 10;
+    }
+    h1 { margin-bottom: 30px; font-size: 36px; text-align: center; }
+    h2 { font-size: 24px; color: #aaa; }
+    button {
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        padding: 15px 30px;
+        margin: 10px;
+        font-size: 18px;
+        cursor: pointer;
+        border-radius: 5px;
+        width: 250px;
+        transition: 0.2s;
+    }
+    button:hover { background-color: #45a049; }
+    #pause-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 5px 15px;
+        font-size: 14px;
+        width: auto;
+        background-color: #666;
+        z-index: 5;
+    }
+    #pause-btn:hover { background-color: #888; }
+    #top-bar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 60px;
+        background-color: #111;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 24px;
+        font-weight: bold;
+        border-bottom: 2px solid #555;
+        z-index: 4;
+    }
+    #countdown-timer { font-size: 80px; color: #4CAF50; margin-top: 10px;}
+    #next-keys-display { color: #FF9800; letter-spacing: 5px;}
+</style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="top-bar">Target: <span id="equation-display" style="margin-left:10px; color: #4CAF50;"></span></div>
+    <button id="pause-btn" onclick="pauseGame(this)">Pause</button>
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+
+    <!-- Main Menu -->
+    <div id="main-menu" class="overlay">
+        <h1>Math Piano</h1>
+        <button onclick="startGame('easy')">Play Easy</button>
+        <button onclick="startGame('hard')">Play Hard</button>
+    </div>
+
+    <!-- Pause Menu -->
+    <div id="pause-menu" class="overlay" style="display: none;">
+        <h1>Paused</h1>
+        <button onclick="resumeGame()">Resume</button>
+        <button onclick="quitToMain()">Quit to Menu</button>
+    </div>
+
+    <!-- Game Over Menu -->
+    <div id="game-over-menu" class="overlay" style="display: none;">
+        <h1 style="color: #f44336;">Game Over</h1>
+        <h2>Score: <span id="final-score">0</span></h2>
+        <button onclick="startGame('easy')">Play Again (Easy)</button>
+        <button onclick="startGame('hard')">Play Again (Hard)</button>
+    </div>
+
+    <!-- Countdown Overlay -->
+    <div id="countdown-menu" class="overlay" style="display: none;">
+        <h2>Keys switching to:</h2>
+        <h1 id="next-keys-display"></h1>
+        <div id="countdown-timer">5</div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+   
+    // UI Elements
+    const mainMenu = document.getElementById('main-menu');
+    const pauseMenu = document.getElementById('pause-menu');
+    const gameOverMenu = document.getElementById('game-over-menu');
+    const countdownMenu = document.getElementById('countdown-menu');
+    const equationDisplay = document.getElementById('equation-display');
+    const finalScore = document.getElementById('final-score');
+   
+    // Game Variables
+    let gameState = 'MENU'; // MENU, PLAYING, PAUSED, COUNTDOWN, GAMEOVER
+    let mode = 'easy';
+    let score = 0;
+    let baseSpeed = 2;
+    let speed = 2;
+   
+    // Key Variables
+    const keySets = [
+        ['a', 's', 'd', 'f'],
+        ['f', 'd', 'h', 'j']
+    ];
+    let currentKeySetIndex = 0;
+    let activeKeys = keySets[0];
+   
+    // Tile Variables
+    let tileY = 60;
+    const tileHeight = 100;
+    const laneWidth = canvas.width / 4;
+    let currentEquation = "";
+    let currentAnswers = [];
+    let correctLane = 0;
+    let countdownInterval;
+
+    function generateMath() {
+        let a, b, op, ans;
+        if (mode === 'easy') {
+            a = Math.floor(Math.random() * 10) + 1;
+            b = Math.floor(Math.random() * 10) + 1;
+            op = Math.random() > 0.5 ? '+' : '-';
+            if (op === '-' && a < b) [a, b] = [b, a];
+            ans = op === '+' ? a + b : a - b;
+        } else {
+            a = Math.floor(Math.random() * 15) + 5;
+            b = Math.floor(Math.random() * 10) + 2;
+            const ops = ['+', '-', '*'];
+            op = ops[Math.floor(Math.random() * ops.length)];
+            if (op === '-' && a < b) [a, b] = [b, a];
+            if (op === '+') ans = a + b;
+            if (op === '-') ans = a - b;
+            if (op === '*') ans = a * b;
+        }
+
+        currentEquation = `${a} ${op} ${b} = ?`;
+        equationDisplay.innerText = currentEquation;
+
+        // Generate 3 unique wrong answers
+        let answersArr = [ans];
+        while (answersArr.length < 4) {
+            let offset = Math.floor(Math.random() * 10) - 5;
+            if (offset === 0) offset = 1;
+            let wrong = ans + offset;
+            if (wrong >= 0 && !answersArr.includes(wrong)) {
+                answersArr.push(wrong);
+            }
+        }
+
+        // Shuffle
+        for (let i = answersArr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [answersArr[i], answersArr[j]] = [answersArr[j], answersArr[i]];
+        }
+
+        currentAnswers = answersArr;
+        correctLane = currentAnswers.indexOf(ans);
+    }
+
+    function resetTile() {
+        tileY = 60; // Start below top bar
+        generateMath();
+        speed = baseSpeed + (score * 0.15);
+    }
+
+    function startGame(selectedMode) {
+        mode = selectedMode;
+        baseSpeed = mode === 'easy' ? 2 : 4;
+        score = 0;
+        currentKeySetIndex = 0;
+        activeKeys = keySets[0];
+        gameState = 'PLAYING';
+       
+        mainMenu.style.display = 'none';
+        gameOverMenu.style.display = 'none';
+        pauseMenu.style.display = 'none';
+        countdownMenu.style.display = 'none';
+       
+        resetTile();
+    }
+
+    function pauseGame(btn) {
+        btn.blur();
+        if (gameState === 'PLAYING') {
+            gameState = 'PAUSED';
+            pauseMenu.style.display = 'flex';
+        } else if (gameState === 'PAUSED') {
+            resumeGame();
+        }
+    }
+
+    function resumeGame() {
+        gameState = 'PLAYING';
+        pauseMenu.style.display = 'none';
+    }
+
+    function quitToMain() {
+        gameState = 'MENU';
+        pauseMenu.style.display = 'none';
+        mainMenu.style.display = 'flex';
+        equationDisplay.innerText = "";
+    }
+
+    function triggerGameOver() {
+        gameState = 'GAMEOVER';
+        finalScore.innerText = score;
+        gameOverMenu.style.display = 'flex';
+        equationDisplay.innerText = "";
+    }
+
+    function startCountdown() {
+        gameState = 'COUNTDOWN';
+        let timeLeft = 5;
+        let nextIndex = 1 - currentKeySetIndex;
+       
+        document.getElementById('next-keys-display').innerText = keySets[nextIndex].join('  ').toUpperCase();
+        document.getElementById('countdown-timer').innerText = timeLeft;
+        countdownMenu.style.display = 'flex';
+
+        countdownInterval = setInterval(() => {
+            timeLeft--;
+            if (timeLeft > 0) {
+                document.getElementById('countdown-timer').innerText = timeLeft;
+            } else {
+                clearInterval(countdownInterval);
+                countdownMenu.style.display = 'none';
+                currentKeySetIndex = nextIndex;
+                activeKeys = keySets[currentKeySetIndex];
+                gameState = 'PLAYING';
+            }
+        }, 1000);
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            pauseGame(document.getElementById('pause-btn'));
+            return;
+        }
+
+        if (gameState !== 'PLAYING') return;
+
+        let keyPressed = e.key.toLowerCase();
+        let laneIndex = activeKeys.indexOf(keyPressed);
+
+        if (laneIndex !== -1) {
+            if (laneIndex === correctLane) {
+                // Correct hit
+                score++;
+                resetTile();
+               
+                if (score > 0 && score % 5 === 0) {
+                    startCountdown();
+                }
+            } else {
+                // Wrong hit
+                triggerGameOver();
+            }
+        }
+    });
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw Lanes & Keys
+        for (let i = 0; i < 4; i++) {
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(i * laneWidth, 60);
+            ctx.lineTo(i * laneWidth, canvas.height);
+            ctx.stroke();
+
+            // Bottom Keys Display
+            ctx.fillStyle = '#555';
+            ctx.fillRect(i * laneWidth, canvas.height - 60, laneWidth, 60);
+            ctx.fillStyle = 'white';
+            ctx.font = '24px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(activeKeys[i].toUpperCase(), i * laneWidth + laneWidth / 2, canvas.height - 30);
+        }
+
+        // Draw Falling Tiles (Only during play/countdown/paused)
+        if (gameState !== 'MENU' && gameState !== 'GAMEOVER') {
+            for (let i = 0; i < 4; i++) {
+                ctx.fillStyle = '#1e88e5';
+                ctx.fillRect(i * laneWidth + 2, tileY, laneWidth - 4, tileHeight);
+               
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 32px Arial';
+                ctx.fillText(currentAnswers[i], i * laneWidth + laneWidth / 2, tileY + tileHeight / 2);
+            }
+        }
+
+        // Draw Score
+        if (gameState !== 'MENU') {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Score: ${score}`, 10, 90);
+        }
+    }
+
+    function update() {
+        if (gameState === 'PLAYING') {
+            tileY += speed;
+            if (tileY + tileHeight > canvas.height - 60) {
+                // Missed the note
+                triggerGameOver();
+            }
+        }
+    }
+
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Start loop
+    requestAnimationFrame(gameLoop);
+
+</script>
+</body>
+</html>
